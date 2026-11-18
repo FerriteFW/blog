@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Because mAh count · Ferrite</title>
+<meta name="description" content="At rest, stock draws about 130 mA. Ferrite draws 18.6. Here&#39;s where the other 111 went.">
+<meta name="theme-color" content="#07080a">
+<meta property="og:title" content="Because mAh count">
+<meta property="og:description" content="At rest, stock draws about 130 mA. Ferrite draws 18.6. Here&#39;s where the other 111 went.">
+<meta property="og:type" content="article">
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="alternate" type="application/atom+xml" title="Ferrite blog" href="https://blog.ferritefw.dev/feed.xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+</head>
+<body class="">
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-head">
+  <div class="wrap head-row">
+    <a class="brand" href="https://ferritefw.dev/"><svg class="logo" viewBox="0 0 120 120" aria-hidden="true" focusable="false">
+  <circle cx="60" cy="60" r="38" fill="none" stroke="#9AA3AE" stroke-width="16"/>
+  <g stroke="#4DA3FF" stroke-width="5" stroke-linecap="round">
+    <line x1="43.0" y1="77.0" x2="23.2" y2="96.8"/><line x1="38.1" y1="69.8" x2="12.6" y2="81.3"/>
+    <line x1="36.0" y1="61.4" x2="8.1" y2="63.1"/><line x1="37.1" y1="52.9" x2="10.4" y2="44.5"/>
+    <line x1="41.1" y1="45.2" x2="19.1" y2="27.9"/><line x1="47.6" y1="39.5" x2="33.1" y2="15.5"/>
+    <line x1="55.7" y1="36.4" x2="50.6" y2="8.9"/><line x1="64.3" y1="36.4" x2="69.4" y2="8.9"/>
+    <line x1="72.4" y1="39.5" x2="86.9" y2="15.5"/><line x1="78.9" y1="45.2" x2="100.9" y2="27.9"/>
+    <line x1="82.9" y1="52.9" x2="109.6" y2="44.5"/><line x1="84.0" y1="61.4" x2="111.9" y2="63.1"/>
+    <line x1="81.9" y1="69.8" x2="107.4" y2="81.3"/><line x1="77.0" y1="77.0" x2="96.8" y2="96.8"/>
+  </g>
+</svg>
+<span>Ferrite</span></a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="https://ferritefw.dev/features/">Features</a></li>
+        <li><a href="https://ferritefw.dev/watch/">Watch</a></li>
+        <li><a href="https://ferritefw.dev/download/">Download</a></li>
+        <li><a href="https://ferritefw.dev/manual/">Manual</a></li>
+        <li><a href="https://ferritefw.dev/bench/">Bench</a></li>
+        <li><a href="https://blog.ferritefw.dev/" aria-current="page">Blog</a></li>
+      </ul>
+      <ul class="nav-out">
+        <li><a href="https://console.ferritefw.dev">Console</a></li>
+        <li><a href="https://discord.gg/fYygBVD2Kx">Discord</a></li>
+        <li><a href="https://github.com/FerriteFW/ferrite">Source</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+<main id="main">
+<article class="wrap column post">
+  <p class="meta"><a href="https://blog.ferritefw.dev/">Blog</a> · By Alex Harvey, VA7IF · <time datetime="2026-11-17">November 17, 2026</time></p>
+  <h1>Because mAh count</h1>
+  <p class="lead" style="margin-top:16px">At rest, stock draws about 130 mA. Ferrite draws 18.6. Here&#39;s where the other 111 went.</p>
+  <div class="prose">
+<p>A handheld spends most of its life waiting: squelch closed, nobody talking. Sitting idle like that, the RT-950 Pro on
+stock firmware draws about 130 mA. On Ferrite it draws 18.6 mA. Same radio, same battery, about 15 hours against 107.</p>
+<p>No single trick does that. It's a lot of small ones, and one big one I haven't seen in radio firmware before.</p>
+<h2>The big one: 24 MHz until something needs it</h2>
+<p>Your phone changes its processor speed all the time. Handheld radios don't: stock sets the radio's AT32F403A (an ARM
+Cortex-M4) to 120 MHz at power-on and leaves it there, decoding a packet or sitting on a dead channel at 3 a.m.</p>
+<p>Ferrite runs it at 24 MHz at rest and goes to 120 MHz only while something asks: a key or the knob, a scan or the band
+scope, transmit, a decoder hearing a signal, a live link to Ferrite Console, audio playing. A second after the last
+request, it drops back. The rule for anything we weren't sure about was &quot;if unsure, high&quot;. A slow menu is annoying; a
+missed packet is a bug.</p>
+<p>The hard part is everything hanging off the clock. Serial rates, GPS, the backlight timers and the system clock all
+divide down from it, so every driver asks for the current speed, and the clock is corrected across each switch so it
+never drifts. That one change took the resting current from 64.7 mA to 18.6, about 71 % off.</p>
+<h2>The small ones</h2>
+<p>The other 65 mA came from going through the board one part at a time and asking &quot;does this need to be on?&quot;</p>
+<ul>
+<li><strong>The keypad light dims.</strong> Stock's is on or off at full brightness. Ferrite drives it with PWM (switching it on and
+off 25,000 times a second, faster than you can see) at half the screen's brightness, and turns it off with the
+screen unless you ask otherwise.</li>
+<li><strong>The screen controller sleeps</strong> when the backlight goes dark: about 7 mA on its own.</li>
+<li><strong>GPS is really off when it's off.</strong> The module's power was cut, but one of the processor's pins still sat high and
+fed it through its receive line. That pin now goes quiet too.</li>
+<li><strong>Unused parts are unclocked:</strong> serial ports, the audio timers, the broadcast receiver chip (held in reset), the
+processor's own temperature sensor (powered only for its reading every 10 seconds).</li>
+<li><strong>No input pin floats.</strong> A floating pin wanders and burns current; every one is pulled or parked.</li>
+<li><strong>The keys and knob are read less often</strong> while the screen is dark, and the screen redraws live meters at most
+four times a second at rest.</li>
+<li><strong>Battery Save</strong> naps the receive chips between checks for a signal, as stock does.</li>
+</ul>
+<p>None of these is dramatic alone. Together they halved stock's figure before the clock change.</p>
+<h2>The numbers</h2>
+<p>Ferrite on my black test radio, with the bench supply (a FNIRSI DPS-150P at 7.6 V) counting the charge itself over
+15 minutes a run: squelch closed on a quiet channel, screen dark, GPS and Bluetooth off.</p>
+<table>
+<thead>
+<tr>
+<th>Firmware</th>
+<th>At rest</th>
+<th>On a 2000 mAh pack</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stock</td>
+<td>about 130 mA</td>
+<td>about 15 h</td>
+</tr>
+<tr>
+<td>Ferrite, clock fixed at 120 MHz</td>
+<td>64.7 mA</td>
+<td>31 h</td>
+</tr>
+<tr>
+<td>Ferrite, 24 MHz until needed</td>
+<td>18.6 mA</td>
+<td>107 h</td>
+</tr>
+</tbody>
+</table>
+<p>That's the best case. A lit screen, keys and scanning cost what they cost, so real use sits above it, and we haven't
+measured typical use yet. It's all on by default; MENU 0 9 9 4 (MCU clock) pins full speed if you'd rather.</p>
+<p>Ferrite is free, with its source public. <a href="https://ferritefw.dev/download/">Get it here</a>, and if your battery lasts longer
+than you expected, tell us on the <a href="https://discord.gg/fYygBVD2Kx">Discord</a>.</p>
+
+  </div>
+  <p class="post-foot">Questions or comments: the <a href="https://discord.gg/fYygBVD2Kx">Ferrite Discord</a>. New posts by
+    <a href="https://blog.ferritefw.dev/feed.xml">feed</a>.</p>
+</article>
+
+</main>
+<footer class="site-foot">
+  <div class="wrap foot-grid">
+    <div>
+      <a class="brand brand-small" href="https://ferritefw.dev/"><svg class="logo" viewBox="0 0 120 120" aria-hidden="true" focusable="false">
+  <circle cx="60" cy="60" r="38" fill="none" stroke="#9AA3AE" stroke-width="16"/>
+  <g stroke="#4DA3FF" stroke-width="5" stroke-linecap="round">
+    <line x1="43.0" y1="77.0" x2="23.2" y2="96.8"/><line x1="38.1" y1="69.8" x2="12.6" y2="81.3"/>
+    <line x1="36.0" y1="61.4" x2="8.1" y2="63.1"/><line x1="37.1" y1="52.9" x2="10.4" y2="44.5"/>
+    <line x1="41.1" y1="45.2" x2="19.1" y2="27.9"/><line x1="47.6" y1="39.5" x2="33.1" y2="15.5"/>
+    <line x1="55.7" y1="36.4" x2="50.6" y2="8.9"/><line x1="64.3" y1="36.4" x2="69.4" y2="8.9"/>
+    <line x1="72.4" y1="39.5" x2="86.9" y2="15.5"/><line x1="78.9" y1="45.2" x2="100.9" y2="27.9"/>
+    <line x1="82.9" y1="52.9" x2="109.6" y2="44.5"/><line x1="84.0" y1="61.4" x2="111.9" y2="63.1"/>
+    <line x1="81.9" y1="69.8" x2="107.4" y2="81.3"/><line x1="77.0" y1="77.0" x2="96.8" y2="96.8"/>
+  </g>
+</svg>
+<span>Ferrite</span></a>
+      <p>Free radio firmware, with its source public, under the
+        <a href="https://ferritefw.dev/licence/">PolyForm Noncommercial License 1.0.0</a>
+        (<a href="https://polyformproject.org/licenses/noncommercial/1.0.0/">full text</a>). Copyright 2026 Alex Harvey.</p>
+    </div>
+    <ul class="foot-links">
+      <li><a href="https://discord.gg/fYygBVD2Kx">Discord</a>: help and questions</li>
+      <li><a href="https://github.com/FerriteFW/ferrite">Source</a>: the code, free and public</li>
+      <li><a href="https://ferritefw.dev/dev/">Developers</a>: building, the link protocol, file formats</li>
+      <li><a href="https://ferritefw.dev/bench/">Bench &amp; support the project</a></li>
+      <li><a href="https://blog.ferritefw.dev/feed.xml">Blog feed</a></li>
+      <li><a href="https://www.radtels.com/products/radtel-rt-950-pro-27mhz-tx-rx-10w-walkie-talkie-am-fm-usb-lsb-cw-receive-gps-aprs-wireless-bluetooth-phone-programming-noaa-two-way-radio?ref=FERRITEFW&amp;variant=44669996794064" rel="sponsored">Radtel RT-950 Pro</a>: the radio</li>
+    </ul>
+  </div>
+  <div class="wrap fine"><p>An independent project, not made by or affiliated with Radtel. · Visits are counted
+    with <a href="https://www.goatcounter.com">GoatCounter</a>: no cookies, nothing personal kept. ·
+    <span class="ca"><svg class="flag" viewBox="0 0 9600 4800" width="32" height="16" role="img" aria-label="Canada"><path fill="#8a929c" d="M2400 0h4800v4800H2400z"/><path fill="#3d444d" d="M0 0h2400v4800H0zM7200 0h2400v4800H7200z"/><path fill="#3d444d" d="M4890 4430l-45-863a95 95 0 0 1 111-98l859 151-116-320a65 65 0 0 1 20-73l941-762-212-99a65 65 0 0 1-34-79l186-572-542 115a65 65 0 0 1-73-38l-105-247-423 454a65 65 0 0 1-111-57l204-1052-327 189a65 65 0 0 1-91-27l-332-652-332 652a65 65 0 0 1-91 27l-327-189 204 1052a65 65 0 0 1-111 57l-423-454-105 247a65 65 0 0 1-73 38l-542-115 186 572a65 65 0 0 1-34 79l-212 99 941 762a65 65 0 0 1 20 73l-116 320 859-151a95 95 0 0 1 111 98l-45 863z"/></svg> Made in Canada</span></p></div>
+</footer>
+<script>window.goatcounter = { path: function (p) { return location.host + p } }</script>
+<script data-goatcounter="https://ferritefw.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>
