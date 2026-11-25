@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-CA">
+  <title>Ferrite blog</title>
+  <subtitle>News from Ferrite, free radio firmware with its source public.</subtitle>
+  <link href="https://blog.ferritefw.dev/feed.xml" rel="self"/>
+  <link href="https://blog.ferritefw.dev/"/>
+  <updated>2026-11-24T00:00:00Z</updated>
+  <id>https://blog.ferritefw.dev/</id>
+  <author><name>Alex Harvey</name></author>
+  <entry>
+    <title>QRM by design: how we torture-test Ferrite</title>
+    <link href="https://blog.ferritefw.dev/qrm-by-design/"/>
+    <updated>2026-11-24T00:00:00Z</updated>
+    <id>https://blog.ferritefw.dev/qrm-by-design/</id>
+    <summary>Thousands of tests, a monkey pressing keys at random, an SDR on the bench listening to every key-up, and a build report with every build. Here&#39;s how we test Ferrite, and why it lets us ship fast.</summary>
+    <content type="html">&lt;p&gt;A handheld radio has a keypad, a knob, two push-to-talk buttons and a power switch. You&#39;d think you could test that
+by hand on a Sunday afternoon.&lt;/p&gt;
+&lt;p&gt;You can&#39;t. Ferrite runs two receivers, three slots, scanning, APRS, satellites and a link to the PC, all at once.
+The bug that bites is never &amp;quot;press MENU&amp;quot;. It&#39;s &amp;quot;press MENU while slot B is scanning, an APRS packet lands and the
+battery-low warning fires.&amp;quot;&lt;/p&gt;
+&lt;p&gt;Hams call interference QRM: the stuff that gets in the way of the signal you want. This post is about the QRM we
+make on purpose, so the radio has seen the worst of it before it gets to you.&lt;/p&gt;
+&lt;h2&gt;Thousands of tests, every change&lt;/h2&gt;
+&lt;p&gt;Almost all of Ferrite (screens, menus, scanner, decoders, channel store) is plain Rust that doesn&#39;t know it&#39;s on a
+radio, so it runs on a laptop in about 30 seconds. On top of that sit tests for the chip drivers, and a simulator
+suite that runs the real UI on a PC, presses keys, turns the knob and reads back the screen.&lt;/p&gt;
+&lt;p&gt;Every feature in the manual is a numbered rule (&amp;quot;SCAN-6: stopping a scan retunes the slot to where it shows&amp;quot;), and
+every rule needs a test that names it or an entry in the radio test plan. A script counts the rules with neither,
+and the answer has to be zero. Many tests end with a &amp;quot;golden&amp;quot; screenshot compared pixel for pixel, so a label that
+moves two pixels fails until someone looks and approves it.&lt;/p&gt;
+&lt;h2&gt;The monkey&lt;/h2&gt;
+&lt;p&gt;Normal tests check what we thought of. The monkey checks what we didn&#39;t.&lt;/p&gt;
+&lt;p&gt;It&#39;s a long, seeded random session: keys, holds and the knob, PTT at odd moments, squelch opening on random
+slots, scans hitting carriers, APRS messages, the battery dropping, the power switch, settings changed from the
+terminal. After every step it checks what must always be true: nothing panics, the radio is in the mode the screen
+asked for, no text is cut off. Every eighth step it redraws the screen from scratch and compares.&lt;/p&gt;
+&lt;p&gt;It found five messages clipped in odd states and four screens that left stale pixels behind. One needed broadcast
+FM to retune a slot while another slot was transmitting. Nobody finds that by hand. When the monkey trips, it
+shrinks hundreds of random steps down to the shortest sequence that still fails, so the fix starts with a short
+repro.&lt;/p&gt;
+&lt;p&gt;Anything that arrives from outside gets fuzzed the same way: APRS packets, AX.25 and FX.25 frames, KISS, and the
+link Console and Bluetooth talk over. Console&#39;s fuzz tests sent the radio a channel at power level 3 (there are
+three, numbered from 0), a zone whose priority channel was past the end of the list, and a GPS position north of
+the North Pole. The radio accepted all three. It doesn&#39;t any more.&lt;/p&gt;
+&lt;h2&gt;The SDR on the bench&lt;/h2&gt;
+&lt;p&gt;Tests on a PC can tell you the radio &lt;em&gt;asked&lt;/em&gt; for 146.520 with a 100.0 Hz tone. They can&#39;t tell you what came out of
+the antenna. For that, a software-defined radio (SDR: a receiver that&#39;s mostly software on a computer) sits on the
+bench next to the test radio, listening.&lt;/p&gt;
+&lt;p&gt;The test radio runs with Dry TX on: the power amplifier held at zero, so a &amp;quot;transmission&amp;quot; only reaches the SDR a
+hand&#39;s width away. One command, &lt;code&gt;bench.py&lt;/code&gt;, sets the radio up over the cable, keys it remotely, records, measures,
+and puts everything back, even when something fails halfway. It checks:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Frequency and deviation&lt;/strong&gt; on VHF and UHF, wide and narrow.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Every CTCSS tone&lt;/strong&gt; (the sub-audible tones repeaters listen for) within 0.2 Hz, and &lt;strong&gt;every DCS code&lt;/strong&gt;, normal
+and inverted, never decoded as the other.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Refusals:&lt;/strong&gt; it tries to key at 43 frequencies on the edges and in the gaps of the band plan. Every one must be
+refused, with the right reason, and nothing on the air.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Remote push-to-talk:&lt;/strong&gt; stop the keepalives and the carrier must drop within 2.5 seconds.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;The bench is paranoid on purpose. Before every key-up it checks the build is a dry one, the frequency is an approved
+test frequency and power is low. It rations its own air time: five seconds at most, a rest twice as long, never
+more than a quarter of any five minutes. It&#39;s a test bench, not a jammer.&lt;/p&gt;
+&lt;p&gt;Receive gets tested from the other direction. A bladeRF (an SDR that can also transmit) plays signals into the
+radio: tones and codes for the squelch, APRS packets with shorter and shorter lead-ins, data streams for bit errors.&lt;/p&gt;
+&lt;p&gt;My favourite from last week: airband channels in Europe are only 8.33 kHz apart, so we built a narrow AM mode. The
+bladeRF sent a wanted station plus a neighbour 8.33 kHz away and 20 dB louder. With the normal AM filter, the
+neighbour came out of the speaker 42 dB louder than the station we were tuned to. With the narrow filter, ours was
+34 dB on top. That one measurement decided airband&#39;s default.&lt;/p&gt;
+&lt;h2&gt;The build report&lt;/h2&gt;
+&lt;p&gt;Every build comes with a build report, and every release ships with one. It&#39;s one page: every suite&#39;s results,
+the flash and RAM used, how the image size changed since the last merge, the SPI flash map, the signature, and code
+coverage.&lt;/p&gt;
+&lt;p&gt;For the latest release (&lt;a href=&quot;https://github.com/FerriteFW/ferrite/releases/tag/v0.9.6&quot;&gt;here&#39;s its build report&lt;/a&gt;, under
+the release&#39;s files): &lt;strong&gt;2,441 tests passed, 0 failed&lt;/strong&gt;, and coverage was &lt;strong&gt;96.0 %&lt;/strong&gt;, meaning the tests ran
+63,945 of the 66,631 lines that ship on the radio.&lt;/p&gt;
+&lt;p&gt;I chase that number because the lines nobody runs are where bugs sit quietly. If a line has never run in a test,
+the first time it runs might be on your radio. But coverage only says a line &lt;em&gt;ran&lt;/em&gt;, not that it did the right thing,
+so it sits next to the rule count and the goldens, never on its own. The report also says plainly what it can&#39;t
+measure: the code that only runs on the radio&#39;s hardware. That part gets the simulator, the on-radio tests and the
+bench.&lt;/p&gt;
+&lt;h2&gt;Every bug becomes a test&lt;/h2&gt;
+&lt;p&gt;A bug isn&#39;t fixed until there&#39;s a test that fails without the fix. The monkey&#39;s shrunk steps become a named test. A
+fuzzer&#39;s bad input is saved in a folder that runs first, every time. A bug from the Discord lands with a test that
+names the rule it broke. So the suite only grows, and every bug we&#39;ve fixed is checked again on every change.&lt;/p&gt;
+&lt;p&gt;That&#39;s what lets us move fast. Ferrite shipped eleven releases in under three weeks this month and merged about a
+hundred pull requests, some deep in the scanner, the transmit path and the channel store.&lt;/p&gt;
+&lt;p&gt;I don&#39;t manage that by being careful. Careful is slow, and careful still misses things. When I change the scanner,
+a few thousand tests tell me within minutes what else I broke. Green tests and a green bench, it ships. Red, it
+doesn&#39;t, and the computer noticed, not you.&lt;/p&gt;
+&lt;h2&gt;What it doesn&#39;t catch&lt;/h2&gt;
+&lt;p&gt;Plenty. How the audio sounds, real-world RF, whether a menu makes sense to a person: none of that is a unit test.
+Some things only show up in a real car on a real repeater, which is why I carry one every day and why reports from
+the Discord matter so much.&lt;/p&gt;
+&lt;p&gt;All of it, the tests, the monkey and the bench scripts included, is in the source on
+&lt;a href=&quot;https://github.com/FerriteFW/ferrite&quot;&gt;GitHub&lt;/a&gt;. If you find something the monkey missed, tell us on the
+&lt;a href=&quot;https://discord.gg/fYygBVD2Kx&quot;&gt;Discord&lt;/a&gt; or &lt;a href=&quot;https://github.com/FerriteFW/ferrite/issues&quot;&gt;open an issue&lt;/a&gt;. It&#39;ll get a rule, a fix and a test.&lt;/p&gt;
+</content>
+  </entry>
+  <entry>
+    <title>Because mAh count</title>
+    <link href="https://blog.ferritefw.dev/because-mah-count/"/>
+    <updated>2026-11-17T00:00:00Z</updated>
+    <id>https://blog.ferritefw.dev/because-mah-count/</id>
+    <summary>At rest, stock draws about 130 mA. Ferrite draws 18.6. Here&#39;s where the other 111 went.</summary>
+    <content type="html">&lt;p&gt;A handheld spends most of its life waiting: squelch closed, nobody talking. Sitting idle like that, the RT-950 Pro on
+stock firmware draws about 130 mA. On Ferrite it draws 18.6 mA. Same radio, same battery, about 15 hours against 107.&lt;/p&gt;
+&lt;p&gt;No single trick does that. It&#39;s a lot of small ones, and one big one I haven&#39;t seen in radio firmware before.&lt;/p&gt;
+&lt;h2&gt;The big one: 24 MHz until something needs it&lt;/h2&gt;
+&lt;p&gt;Your phone changes its processor speed all the time. Handheld radios don&#39;t: stock sets the radio&#39;s AT32F403A (an ARM
+Cortex-M4) to 120 MHz at power-on and leaves it there, decoding a packet or sitting on a dead channel at 3 a.m.&lt;/p&gt;
+&lt;p&gt;Ferrite runs it at 24 MHz at rest and goes to 120 MHz only while something asks: a key or the knob, a scan or the band
+scope, transmit, a decoder hearing a signal, a live link to Ferrite Console, audio playing. A second after the last
+request, it drops back. The rule for anything we weren&#39;t sure about was &amp;quot;if unsure, high&amp;quot;. A slow menu is annoying; a
+missed packet is a bug.&lt;/p&gt;
+&lt;p&gt;The hard part is everything hanging off the clock. Serial rates, GPS, the backlight timers and the system clock all
+divide down from it, so every driver asks for the current speed, and the clock is corrected across each switch so it
+never drifts. That one change took the resting current from 64.7 mA to 18.6, about 71 % off.&lt;/p&gt;
+&lt;h2&gt;The small ones&lt;/h2&gt;
+&lt;p&gt;The other 65 mA came from going through the board one part at a time and asking &amp;quot;does this need to be on?&amp;quot;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;The keypad light dims.&lt;/strong&gt; Stock&#39;s is on or off at full brightness. Ferrite drives it with PWM (switching it on and
+off 25,000 times a second, faster than you can see) at half the screen&#39;s brightness, and turns it off with the
+screen unless you ask otherwise.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;The screen controller sleeps&lt;/strong&gt; when the backlight goes dark: about 7 mA on its own.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;GPS is really off when it&#39;s off.&lt;/strong&gt; The module&#39;s power was cut, but one of the processor&#39;s pins still sat high and
+fed it through its receive line. That pin now goes quiet too.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Unused parts are unclocked:&lt;/strong&gt; serial ports, the audio timers, the broadcast receiver chip (held in reset), the
+processor&#39;s own temperature sensor (powered only for its reading every 10 seconds).&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;No input pin floats.&lt;/strong&gt; A floating pin wanders and burns current; every one is pulled or parked.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;The keys and knob are read less often&lt;/strong&gt; while the screen is dark, and the screen redraws live meters at most
+four times a second at rest.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Battery Save&lt;/strong&gt; naps the receive chips between checks for a signal, as stock does.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;None of these is dramatic alone. Together they halved stock&#39;s figure before the clock change.&lt;/p&gt;
+&lt;h2&gt;The numbers&lt;/h2&gt;
+&lt;p&gt;Ferrite on my black test radio, with the bench supply (a FNIRSI DPS-150P at 7.6 V) counting the charge itself over
+15 minutes a run: squelch closed on a quiet channel, screen dark, GPS and Bluetooth off.&lt;/p&gt;
+&lt;table&gt;
+&lt;thead&gt;
+&lt;tr&gt;
+&lt;th&gt;Firmware&lt;/th&gt;
+&lt;th&gt;At rest&lt;/th&gt;
+&lt;th&gt;On a 2000 mAh pack&lt;/th&gt;
+&lt;/tr&gt;
+&lt;/thead&gt;
+&lt;tbody&gt;
+&lt;tr&gt;
+&lt;td&gt;Stock&lt;/td&gt;
+&lt;td&gt;about 130 mA&lt;/td&gt;
+&lt;td&gt;about 15 h&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Ferrite, clock fixed at 120 MHz&lt;/td&gt;
+&lt;td&gt;64.7 mA&lt;/td&gt;
+&lt;td&gt;31 h&lt;/td&gt;
+&lt;/tr&gt;
+&lt;tr&gt;
+&lt;td&gt;Ferrite, 24 MHz until needed&lt;/td&gt;
+&lt;td&gt;18.6 mA&lt;/td&gt;
+&lt;td&gt;107 h&lt;/td&gt;
+&lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+&lt;p&gt;That&#39;s the best case. A lit screen, keys and scanning cost what they cost, so real use sits above it, and we haven&#39;t
+measured typical use yet. It&#39;s all on by default; MENU 0 9 9 4 (MCU clock) pins full speed if you&#39;d rather.&lt;/p&gt;
+&lt;p&gt;Ferrite is free, with its source public. &lt;a href=&quot;https://ferritefw.dev/download/&quot;&gt;Get it here&lt;/a&gt;, and if your battery lasts longer
+than you expected, tell us on the &lt;a href=&quot;https://discord.gg/fYygBVD2Kx&quot;&gt;Discord&lt;/a&gt;.&lt;/p&gt;
+</content>
+  </entry>
+  <entry>
+    <title>Why Ferrite is Rust(ing)</title>
+    <link href="https://blog.ferritefw.dev/why-rust/"/>
+    <updated>2026-11-15T00:00:00Z</updated>
+    <id>https://blog.ferritefw.dev/why-rust/</id>
+    <summary>Almost every radio firmware on Earth is C. Ferrite is Rust. Here&#39;s why.</summary>
+    <content type="html">&lt;p&gt;Almost every radio firmware on Earth is written in C. The chip vendors ship C. The examples are C. The forum posts from
+2011 that you end up reading at midnight are C. When you&#39;ve got 96 KB of RAM and no operating system, C is what you
+reach for without thinking.&lt;/p&gt;
+&lt;p&gt;So naturally, I wrote Ferrite in Rust.&lt;/p&gt;
+&lt;p&gt;Before you close the tab: this isn&#39;t a &amp;quot;rewrite it in Rust&amp;quot; sermon. I picked it before a single line of Ferrite
+ran on the radio, for boring, practical reasons. They just happen to be very good boring, practical reasons.&lt;/p&gt;
+&lt;h2&gt;It&#39;s a computer. With a transmitter.&lt;/h2&gt;
+&lt;p&gt;Pop the back off a Radtel RT-950 Pro and you&#39;ll find an Artery AT32F403A (a Cortex-M4 rated for 240 MHz; Ferrite
+runs it at up to 120), 96 KB of RAM, two Beken BK4829 transceiver chips and an SI4732 for broadcast and shortwave.
+That little M4 decides what frequency the transmitter keys up on, how hard, and for how long.&lt;/p&gt;
+&lt;p&gt;Most software bugs give you a crash dialog. Radio firmware bugs give you a carrier on the wrong frequency, and
+possibly a polite email from someone with a direction-finding antenna.&lt;/p&gt;
+&lt;p&gt;So I wanted the meanest compiler I could find. Rust&#39;s will flat out refuse to build a whole family of classic
+firmware bugs: memory used after it&#39;s gone, two tasks scribbling on the same thing at once, the &lt;code&gt;match&lt;/code&gt; that forgot
+a case. Every one of those is a bug I never had to hunt down.&lt;/p&gt;
+&lt;h2&gt;The bench is a time suck&lt;/h2&gt;
+&lt;p&gt;Here&#39;s the loop for radio firmware: build an image, flash it through the stock bootloader over the programming
+cable, then go test it on a real radio with a real signal. Minutes, every single time. The flash alone is about 85
+seconds of staring at a progress bar, which is exactly one cup of coffee if you don&#39;t stop to let it cool.&lt;/p&gt;
+&lt;p&gt;A bug the compiler catches costs seconds. A bug the bench catches costs another coffee. A bug the bench &lt;em&gt;doesn&#39;t&lt;/em&gt;
+catch costs a lot more than that. So a strict compiler is worth its weight in gold: it&#39;s the grumpiest code
+reviewer I&#39;ve ever had, it reviews every line, and if it compiles, a lot of things are already true.&lt;/p&gt;
+&lt;h2&gt;A third heavier, and worth it&lt;/h2&gt;
+&lt;p&gt;Before I committed to it, I ported my first C test image to Rust, feature for feature. The Rust build came out about a
+third bigger. The radio has the room, and I&#39;ll trade bytes for bugs-that-can&#39;t-happen any day.&lt;/p&gt;
+&lt;p&gt;Size still bites, though. One innocent extra branch in a drawing routine got copied into every screen that draws,
+and fixing it gave back 19,312 bytes. Nineteen thousand, three hundred and twelve bytes. For an if-statement. How
+we keep Ferrite lean is a post of its own: the Rust diet.&lt;/p&gt;
+&lt;h2&gt;Ferrite runs everywhere&lt;/h2&gt;
+&lt;p&gt;Being able to test and simulate the radio on my desk was one of the big reasons for Rust. Everything above the
+registers builds for a PC as well as for the radio, so thousands of tests run before anything gets flashed, the
+screen recordings on this site are the firmware&#39;s own drawing code, and Ferrite Console runs the radio&#39;s own code
+in your browser. More on this in a future blog post.&lt;/p&gt;
+&lt;h2&gt;Naps are free&lt;/h2&gt;
+&lt;p&gt;Under the hood it&#39;s &lt;a href=&quot;https://embassy.dev/&quot;&gt;Embassy&lt;/a&gt;, an async framework built for exactly this kind of chip. The radio,
+the screen, the keys, APRS and GPS are each a task that naps until there&#39;s work to do. And when everything&#39;s
+napping, Ferrite drops the core from 120 MHz all the way down to 24 MHz.&lt;/p&gt;
+&lt;p&gt;Sitting on a quiet channel, the stock firmware draws over 100 mA. Ferrite was built around power from the start,
+switching off everything it isn&#39;t using, and that alone gets it to 64.7 mA with the clock pinned at full speed. Let
+the core nap at 24 MHz and it&#39;s 18.6 mA. That&#39;s about 107 hours on the stock battery pack. My exact words when the
+number came in were &amp;quot;this is massive&amp;quot;, and I&#39;m sticking with them. (Fair warning: resting is the best case.
+Scanning, mashing keys and APRS bring the clock back up while they run.)&lt;/p&gt;
+&lt;h2&gt;Out now&lt;/h2&gt;
+&lt;p&gt;Ferrite 0.9 is out: free, with its source public. &lt;a href=&quot;https://ferritefw.dev/download/&quot;&gt;Get it here&lt;/a&gt;, &lt;a href=&quot;https://ferritefw.dev/features/&quot;&gt;go see what it does&lt;/a&gt;, and stick
+around here. There&#39;s a lot more bench work to write up, and some of it involves a bladeRF and questionable life
+choices.&lt;/p&gt;
+</content>
+  </entry>
+</feed>
